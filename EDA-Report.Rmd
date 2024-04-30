@@ -1,0 +1,367 @@
+---
+title: "Austin Traffic Data Analysis"
+output:
+  word_document: default
+  html_document: default
+---
+
+```{r global_options, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, eval = TRUE,  
+                      warning = TRUE, message = FALSE, 
+                      fig.align = "center",
+                      R.options = list(max.print=100))
+
+# Upload packages
+library(tidyverse)
+library(readr)
+```
+
+### Prepared by: Alec Neff (UT EID: aen828)
+
+------------------------------------------------------------------------
+
+## Part 1: Introduction
+
+The data set chosen for analysis in this project is the "Bluetooth Travel Sensors - Individual Traffic Match Files (IMTF)" data set from the data.austintexas.gov website database. This data was collected by a network of Bluetooth sensors that detected other Bluetooth devices and transmitted the device's address and time-stamp to a central server. The centralized server that received this data from the network of sensors then generated the data files in this data set.
+
+This data is incredibly important to study for a few main reasons. One reason is that studying ITMF data can provide city planners and engineers with detailed insights into traffic flow patterns, which can help identify where infrastructure improvements are necessary. This problem alone is a huge concern for Austin city officials and the community as a whole, considering the massive tech migration to the Austin-area and sudden population increase. According to Chloe Stavinoha with Aquila Commercial, ([Reference](https://aquilacommercial.com/learning-center/challenges-austin-tx/)), one of Austin's greatest challenges at this moment is traffic control and city infrastructure. Therefore, this data could unlock some insights that are extremely important for the city to make appropriate changes. Another reason this data is important would be for safety enhancements on the roadways. With a rapidly growing population, more cars generally means more accidents, so identifying unsafe traffic conditions in certain areas can allow for targeted interventions to help improve road safety for the community. I'm particularly interested in this because I plan to live here after school and I drive everywhere. Gaining a stronger understanding of traffic patterns is therefore more interesting to me.
+
+The main variables of interest for this project will be Origin, Final Destination, Speed, Length of Travel, and Day of the Week. These variables will be analyzed to lead to a single outcome variable, Traffic Level, which will represent a congestion score of low, medium, or high congestion. This will also lead to an outcome variable of optimal travel windows, which will be created by analyzing days, times, and traffic levels at specific intersections/routes. A unique row will represent one reading of a Bluetooth device, (vehicle traveling), that has an Origin, Final Destination, Start Time, Speed, Travel Time, Day of the Week, Match Validity, and Congestion Level.
+
+After completing the analysis, I expect to see a strong relationship between travel time and speed traveled, while Austin as a whole having many periods of high or moderate congestion on the roads. My research will attempt to answer the question: How do travel times and speeds vary by day of the week in Austin?
+
+------------------------------------------------------------------------
+
+## Part 2: Methods
+
+Read the data into R.
+
+```{r}
+traffic_data <- read_csv("ProjectData.csv")
+```
+
+### Description
+
+Description of the data set, reporting the number of rows and columns. In order to wrangle the data, I needed to rename the column names to not include spaces. The original dataset included an end time column along with another identifier column, but I queried the data to exclude these columns to limit the size of the csv file.
+
+```{r}
+#Number of rows
+nrow(traffic_data)
+#Number of cols
+ncol(traffic_data)
+#summary stats
+summary(traffic_data)
+
+#replace spaces with underscores in column names
+traffic_data <- traffic_data |>
+  rename_with(~ gsub(" ", "_", .x)) |>
+  rename(Speed_MPH = `Speed_(Miles_Per_Hour)`)
+```
+
+There are 8 columns/variables and 43,116 rows/observations. Summary statistics are also available above. The only cleaning I needed to perform was changing the variable names to be handled in R easily. The resulting data set is tidy because it satisfies all three criteria: each variable has its own column, each observation has it's own row, and each value has it's own cell. Every variable had to be re-coded to replace spaces with underscores. "Speed\_(Miles_Per_Hour)" also had to be re-coded to exclude the parenthesis at the end of the name so \`\` wouldn't be needed.
+
+```{r}
+#display the data set head to show how the data ended up looking
+head(traffic_data)
+```
+
+I then wanted to create an outcome variable of the travel congestion level for each observation. To do this, I need to add a new variable of congestion level using mutate. This portion was very challenging, because I needed to find good high & low speed values to separate into different cases. Obviously, speed limits are different along different routes, but given the size of the data set and my beginner level of coding experience, I couldn't figure out a way to calculate each route's distance and speed limit. Therefore, I selected the values of 18 mph or less being on the low end, and 38 mph or more to be on the high end. Combining this with travel time could give us a good representation of when traffic is high, moderate or low. For travel time I have selected the high-low values as 46 and 120 seconds, respectively.
+
+```{r}
+#Find the min and max of travel time to know where to set the high and lows
+summary(traffic_data$Travel_Time_Seconds)
+
+#Add a congestion level variable
+traffic_data <- traffic_data |>
+  mutate(Congestion_Level = case_when(
+    #Low traffic case
+    Speed_MPH > 38 & Travel_Time_Seconds < 46 ~ "Low", 
+    #Moderate traffic case
+    Speed_MPH <= 38 & Speed_MPH >= 18 & Travel_Time_Seconds >= 46 & Travel_Time_Seconds <= 120 ~ "Moderate",
+    #High traffic case
+    Speed_MPH < 18 & Travel_Time_Seconds > 120 ~ "High",
+    #in case a value doesn't match
+    TRUE ~ "Unknown"
+  ))
+
+#find new rol col
+nrow(traffic_data)
+ncol(traffic_data)
+
+```
+
+After this sorting process, there are now 9 columns, but still 43,116 rows.
+
+------------------------------------------------------------------------
+
+## Part 3: Results
+
+Exploring the data with visualizations and summary statistics!
+
+### Numeric Variable: Uni-variate Distribution
+
+Below is a uni-variate distribution of the speeds that were observed across the entire data set.
+
+```{r}
+#Plot the traffic data
+ggplot(data = traffic_data) +
+  #Create a histogram for the speeds traveled with appropriate binwidths
+  geom_histogram(aes(x = Speed_MPH), binwidth = 5, center = 2.5, color = "black", fill = "orange") +
+  #label the plot
+  labs(x = "Speeds (mph)", y = "# of Occurences", title = "(Plot 1) Vehicle Speeds in Austin") +
+  #scale the axes
+  scale_x_continuous(breaks = seq(0, 100, 5)) + 
+  scale_y_continuous(breaks = seq(0, 6000, 500))
+  
+#give some summary statistics about the plot
+summary(traffic_data$Speed_MPH)
+#find the mean 
+mean_speed <- mean(traffic_data$Speed_MPH)
+#find the standard deviation
+sd_speed <- sd(traffic_data$Speed_MPH)
+#print the mean and standard deviation
+mean_speed
+sd_speed
+#represent both ends of the standard deviation on the data
+mean_speed - sd_speed
+mean_speed + sd_speed
+
+```
+
+**Note. We can see that the majority of driving is done between 15-40mpg in Austin, with the mean being 28.59 mph and a standard deviation of 14.03828 mph. The median being close to the mean at 28.00 mph. By applying the standard deviation to the mean, we can assume that 68% of the data lies between 14.55235 and 42.62892 mph.**
+
+------------------------------------------------------------------------
+
+### Categorical Variable: Uni-variate Distribution
+
+Below is a uni-variate distribution of the days of the week that were observed across the entire data set.
+
+```{r}
+#Plot the categorical variable by each day of the week
+ggplot(data = traffic_data) +
+  # Use geom_histogram and define mapping aesthetics
+  geom_bar(aes(x = Day_of_Week), fill = "red", color = "black") +
+  #label the plot
+  labs(title = '(Plot 2) Vehicles Readings by Day of the Week', x = 'Day of the Week', y = '# of Readings') +
+  #scale the readings axis
+  scale_y_continuous(breaks = seq(0, 8000, 1000)) + 
+  #flip for readability
+  coord_flip() 
+
+#Group by weekday or weekend to plot 
+new_data <- mutate(traffic_data, days_2cat = ifelse(Day_of_Week == "Sunday" |   Day_of_Week == "Saturday", "Weekend", "Weekday"))
+#Plot weekday vs weekend
+ggplot(data = new_data) +
+   # Use geom_histogram and define mapping aesthetics
+  geom_bar(aes(x = days_2cat), fill = "green", color = "black") +
+  #label the plot
+  labs(title = '(Plot 3) Vehicles Readings by Type of Day', x = 'Type of Day', y = '# of Readings') +
+  #scale the readings axis
+  scale_y_continuous(limits = c(0, 40000), breaks = seq(0, 40000, 5000)) + 
+  #flip for readability
+  coord_flip() 
+
+#Find the summary statistics for each 
+summary_table <- table(traffic_data$Day_of_Week)
+summary_table
+table_2cat <- table(new_data$days_2cat)
+table_2cat
+```
+
+**Note. According to the summary table, there are 6,783 Monday observations, 6,084 for Tuesday, 6,249 for Wednesday, 7,686 for Thursday, 6,380 for Friday, 3,318 for Saturday, and 6,616 for Sunday. I know we only need 4 categories for the variable but I figured I'd use all of them for this assignment and when I go more in depth, trim it down to Weekdays vs Weekends. The weekend vs weekday visualization doesn't tell us much considering there are 5 weekdays and 2 weekends, but we can see that there are 33,183 weekday readings and 9,934 weekend readings.**
+
+------------------------------------------------------------------------
+
+### Numeric Variable: Bi-variate Distribution
+
+Below is a bi-variate distribution of the speeds that were observed and their relationship to travel time. This relationship is fundamental in traffic analysis because a model can be made for the general amount of time it should take to travel while moving at a given speed.
+
+```{r}
+#Plot the relationship
+ggplot(data = traffic_data, aes(x = Speed_MPH, y = Travel_Time_Seconds)) +
+  #use a scatter plot
+  geom_point(aes(color = Congestion_Level)) +
+  #put a regression line on the plot
+  geom_smooth(method = "lm", se = FALSE, color = "steelblue", linewidth = 2) +
+  #label the plot appropriately
+  labs(x = "Speed (MPH)", y = "Travel Time (Seconds)", title = "(Plot 4) Relationship between Speed and Travel Time") #+
+
+#find summary statistics using R^2 and RMSE
+#find lin regresion model
+fit_lin <- lm(Travel_Time_Seconds ~ Speed_MPH, data = traffic_data)
+#summary expression
+summary(fit_lin)
+
+#evaluate first RMSE of model
+sqrt(mean(resid(fit_lin)^2))
+#evaluate the r adjusted
+summary(fit_lin)$adj.r.squared
+```
+
+**Note. This plot shows that there is likely a hyperbolic relationship between speed and travel time. More will be discussed in the discussion section. But the summary statistics of RMSE and R\^2, 58.6 and 0.00349 respectively, show that there is a weak linear relationship between the variables.**
+
+------------------------------------------------------------------------
+
+### Categorical vs. Numerical : Bi-variate Distribution
+
+Below is a bi-variate distribution of the travel times in relationship to day of the week.
+
+```{r}
+#Plot the relationship
+ggplot(data = traffic_data, aes(x = Day_of_Week, y = Travel_Time_Seconds, fill = Day_of_Week)) +
+  #use a boxplot to represent the data
+  geom_boxplot() +
+  #label the plot appropriately
+  labs(x = "Day of the Week", y = "Travel Time (Seconds)", title = "(Plot 5) Travel Time Variation by Day of the Week")
+
+#For summary statistics
+summary_stats <- traffic_data |>
+  group_by(Day_of_Week) |>
+  #Find each summary stat below (mean, median, standard devication, min and max)
+  summarize(
+    Mean_Travel_Time = mean(Travel_Time_Seconds, na.rm = T), 
+    Median_Travel_Time = median(Travel_Time_Seconds, na.rm = T), 
+    SD_Travel_Time = sd(Travel_Time_Seconds, na.rm = T), 
+    Min_Travel_Time = min(Travel_Time_Seconds, na.rm = T),
+    Max_Travel_Time = max(Travel_Time_Seconds, na.rm = T),
+    Count = n())
+#display the summary stats
+summary_stats
+
+```
+
+**Note. From the box-plot above, and the summary statistics, we can see that Monday has the lowest mean and median travel_time of any Day of the Week, while Tuesday barely has the highest. It appears as though Monday is the only day to significantly differ in travel time statistics. Thursday has the highest mean travel time of 99.52 seconds, while Saturday has the highest median travel time of 91 seconds.**
+
+------------------------------------------------------------------------
+
+### Categorical vs. Categorical: Bi-variate Distribution
+
+Below is a bi-variate distribution congestion levels in relationship to day of the week.
+
+```{r}
+# Plot the relationship
+traffic_data |>
+  #filter to only classified congsetion data
+  filter(Congestion_Level != "Unknown") |>
+#plot the findings
+ggplot(aes(x = Day_of_Week, fill = Congestion_Level)) +
+  #use a fill bar 
+  geom_bar(position = "fill") +
+  #label the graph
+  labs(x = "Day of the Week", y = "Proportion of Congestion Level", title = "(Plot 6) Congestion Level by Day of the Week") 
+  #use general color values
+#find the frequencies of each value as summary stats
+table(traffic_data$Congestion_Level, traffic_data$Day_of_Week)
+```
+
+**Note. We can see from the plot that the majority of classified traffic congestion level values are moderate traffic, which makes sense. Monday has the largest proportion of low congestion levels, while Saturday and Thursday appear to have a largest proportion of high congestion traffic levels. That being said, from the table above, we can also see that a large proportion of values were excluded from the analysis due to the classification constraints. For that reason, a more detailed model would likely be needed and will be discussed in the discussion section.**
+
+------------------------------------------------------------------------
+
+## Part 3b: Predict an Outcome
+
+I already created an outcome variable using linear regression, but it performed poorly. So let's try again using our calculated congestion levels and Speed.
+
+### Numeric Variable Prediction
+
+Below is a model to predict the travel time of a traveler given their driving speed and the Predicted Congestion Level using a linear model to predict a continuous variable.
+
+```{r}
+#fit the model using a linear regression
+traffic_reg <- lm(Travel_Time_Seconds ~ Speed_MPH + Congestion_Level, data = traffic_data)
+#summary of model
+summary(traffic_reg)
+
+#predict the values using our model
+traffic_data |>
+  #add the predicted variable
+  mutate(predicted = predict(traffic_reg)) |>
+  #look at necessary variables
+  select(Travel_Time_Seconds, Speed_MPH, Congestion_Level, predicted)
+
+#evaluate first RMSE of model
+sqrt(mean(resid(traffic_reg)^2))
+#evaluate the r adjusted
+summary(traffic_reg)$adj.r.squared
+
+#Cross validation
+# Make this example reproducible by setting a seed
+set.seed(322)
+
+#perform 5-fold cross-validation with 5 folds
+k = 5
+
+#randomly order rows
+data <- traffic_data[sample(nrow(traffic_data)), ]
+
+#create k folds from the dataset (5)
+folds <- cut(seq(1:nrow(data)), breaks = k, labels = FALSE)
+
+#initialize the vector to check performance
+perf_k <- NULL
+
+# Use a for-loop to get performance for each k-fold
+for(i in 1:k){
+  # Split data into train and test data
+  train_not_i <- data[folds != i, ] # train data = all observations except in fold i
+  test_i <- data[folds == i, ]  # test data = observations in fold i
+  
+  # Train model on train data (all but fold i)
+  train_model <- lm(Travel_Time_Seconds ~ Speed_MPH + Congestion_Level, data = train_not_i)
+  
+  # Performance listed for each test data = fold i
+  perf_k[i] <- sqrt(mean((
+    test_i$Travel_Time_Seconds - predict(train_model, newdata = test_i))^2, 
+    na.rm = TRUE))
+}
+
+# Performance for each fold 
+perf_k
+#average performance over all folds
+mean(perf_k)
+#Standard deviation (sd) 
+sd(perf_k)
+
+
+```
+
+**Note. As we can see from the model, the RMSE of this model is still high, but is lower than the previous one only using Speed_MPH as a predictor by about 8. This likely means our congestion level outcome variable does have a predictive affect on the model. The RMSE is approximately 50.61 and the std is \~ 0.44, which so the mean is still high. Our cross validation shows the performance for each fold, which indicates the model is still underfitting. The R\^2 adjusted value is also significantly higher than our previous model, but still not great, at a value of \~0.26. Overall, the model would not take accurately to new data, but it does better than the previous model.**
+
+------------------------------------------------------------------------
+
+## Part 4: Discussion
+
+After working through the data with several visualizations and summary statistics, the main takeaways and answers to my research question are pretty apparent. In the beginning, I proposed the research question of: How do travel times and speeds vary by day of the week in Austin? In order to begin the analysis, I visualized the distributions of travel speeds, and days of the week that were contained in the data set (Plots 1-3). From there, I wanted to visualize my outcome variable, Congestion Level, which was strategically created to represent high, moderate, and low congestion levels for each value in the data set.
+
+The first main takeaway from my analysis is that a complicated machine learning model might be needed to accurately represent the relationship between speed and travel times around every location in Austin. I quickly figured out that I wouldn't be able to compare every route to other observations on that route, and rather than select a few target routes to analyze, I believed that representing the overall trends would be more beneficial for this purpose by constructing a classification variable. In doing so, it raised one of the biggest flaws of my work, which is that some important data might be excluded based on the cutoff criteria no matter how hard I try to create accurate cutoffs for my classification. While balancing your results is an important aspect of data science, the data set didn't have a variable representing traffic levels so there was no way to compare true/false positive/negative values within my analysis. That being said, I believe that my cutoff criteria was the best representation of the data.
+
+The other main takeaway from my research is that a moderate traffic level is very common in Austin, Texas. However, after applying my case criteria for high, moderate and low congestion levels, the table attached to Plot 6 showed than many of the data points were classified as unknown because they didn't identify with any of the three levels. This was not what I expected, and actually directly contradicts it. I predicted that Austin would almost exclusively experience high or moderate traffic levels, and that they would be easily classifiable because travel time and speed would be tightly correlated. Both of those assumptions wound up being false, shown in Plots 4 and 6. The the summary statistics of RMSE and R\^2 for my linear model in plot 4 were 58.6 and 0.00349, respectively. This correlation is horrible, enough to be tossed out entirely as being related. This could likely be due to traffic patterns being so different across different times, days, holidays, construction zones, and accidents. If I had a partner, I could have potentially joined a data set representing accidents in the Austin area and merged into a new data set to investigate further. I'm curious if I had analyzed traffic congestion level and compared it to the time of day being between a certain period, if a lot of the high congestion zones would have been during rush hour times.
+
+As far as possible impacts or implications of my results, there are definitely some concerns related to privacy of Bluetooth device owners. By prioritizing data privacy and ensuring the anonymization technique of Bluetooth device addressed, we can mitigate privacy concerns to protect individuals data while still gaining valuable insights into traffic patterns. Additionally, addressing bias and fairness in the analysis ensures that traffic management solutions benefit all areas of a city, not just the most congested, promoting equitable improvements across the constituents.
+
+There is nothing at this time about the data set itself that I would like to report. I did not encounter any typos, missing values, or inconsistent categories.
+
+------------------------------------------------------------------------
+
+## Part 5: Reflection
+
+This project was incredibly insightful in how a real data scientist might try and tackle a real world problem. The most challenging aspect of the project for me was getting the data to answer the question that I wanted answered. Originally when thinking about using this data set, I wanted to analyze traffic patterns to identify times of high traffic congestion, and maybe determine routes around the city to avoid at certain times. I quickly realized that doing so would require me to analyze each route specifically or map out each route to analyze. Considering there are 83 unique sensors that can travel to any of the other 82 potential sensors, that means there are 6,806 potentially routes to analyze. Obviously, that is too many, so I choose my classification method instead which I think worked out well to count totals, but not perform linear regression.
+
+```{r}
+#find the distinct number of identifiers
+n_distinct(traffic_data$Origin_Reader_Identifier)
+n_distinct(traffic_data$Destination_Reader_Identifier)
+#how many possible routes are there?
+83*82
+
+```
+
+After completing the project, I have learned a lot about what it means to analyze data within the scope of your own research question. Everything that I have done up until this point has been laid out for me, and I can make small decisions here and there. This time around, I had to make every decision when it came down to how I wanted to analyze the speeds, travel times, and traffic levels. Not only did I have to make those decisions, but I had to come up with ways to work around the challenges and find a way to analyze the data appropriately to get results.
+
+I would like to thank Dr. Layla Guyot, Graduate TA Ciara Nugent, Undergraduate TA's Dustyn and Vaishnavi, and the City of Austin for helping me along the journey of completing this project.\
+
+## References:
+
+Data set: <https://data.austintexas.gov/Transportation-and-Mobility/Bluetooth-Travel-Sensors-Individual-Traffic-Match-/x44q-icha/about_data>
+
+Article: <https://aquilacommercial.com/learning-center/challenges-austin-tx/>
